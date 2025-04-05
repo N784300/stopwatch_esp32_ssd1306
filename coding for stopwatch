@@ -1,0 +1,180 @@
+//-----------------------
+// Stopwatch with Lap Time on SSD1306 OLED
+//-----------------------
+
+#include <Wire.h>
+#include <Adafruit_GFX.h>
+#include <Adafruit_SSD1306.h>
+
+// OLED display dimensions
+#define SCREEN_WIDTH 128 
+#define SCREEN_HEIGHT 64
+#define OLED_RESET    -1  // Reset pin (or -1 if sharing Arduino reset pin)
+#define MAX_LAPS 5        // Maximum number of laps to store and display
+
+Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
+
+String milliSec; 
+boolean debounce1, debounce2;
+unsigned long btn1PressStart = 0, btn2PressStart = 0;
+unsigned long Sec, Min, startMillis; 
+int lapNum = 1;
+
+// Array to store lap times
+String lapTimes[MAX_LAPS];
+
+void setup() {
+  // Set up button pins with internal pull-up resistors
+  pinMode(4, INPUT_PULLUP); 
+  pinMode(7, INPUT_PULLUP);
+  
+  // Initialize serial communication (optional for debugging)
+  Serial.begin(115200);
+  
+  // SSD1306 display initialization
+  if (!display.begin(SSD1306_SWITCHCAPVCC, 0x3C)) { // Change address if necessary
+    Serial.println("SSD1306 allocation failed");
+    for (;;); // Infinite loop if initialization fails
+  }
+  
+  display.clearDisplay();
+  display.setTextSize(1);              
+  display.setTextColor(SSD1306_WHITE); 
+  display.setCursor(0, 0);
+  display.println("------STOPWATCH------");
+  display.setCursor(0, 50);
+  display.println("    Press to start");
+  display.display();
+  
+  // Optionally, set a larger text size when showing time
+  display.setTextSize(2);
+}
+
+void loop() {
+  // With pull-ups, a pressed button reads LOW.
+  if (millis() - btn1PressStart > 500) debounce1 = true;
+  if (digitalRead(4) == LOW && debounce1 == true) {
+    btn1PressStart = millis();
+    debounce1 = false;
+    stopWatch();
+  }
+}
+
+void stopWatch() {
+  display.clearDisplay();
+  startMillis = millis();
+  
+  // Clear lap array at the start of the stopwatch
+  for (int i = 0; i < MAX_LAPS; i++) {
+    lapTimes[i] = "";
+  }
+  
+  // Main stopwatch loop
+  while (1) {
+    // Check for stop button on pin 4
+    if (millis() - btn1PressStart > 500) debounce1 = true;
+    if (digitalRead(4) == LOW && debounce1 == true) {
+      btn1PressStart = millis();
+      debounce1 = false;
+      
+      // Display "END" on the upper part of the screen
+      display.clearDisplay();
+      display.setTextSize(2);
+      display.setCursor(48, 25);
+      display.print("END");
+      display.display();
+      
+      // Reset lap counter and break out of the loop
+      lapNum = 1;
+      btn2PressStart = 0;
+      //delay(1); // Brief pause to show END state
+      break;
+    }
+    
+    // Check for lap button on pin 7
+    if (millis() - btn2PressStart > 400) debounce2 = true; // true =[[]] if (millis() - btn2PressStart > 500) debounce2 = true;
+    if (digitalRead(7) == LOW && debounce2 == true) {
+      btn2PressStart = millis();
+      debounce2 = false;
+      lapTime();
+    }
+    
+    // Calculate elapsed time
+    unsigned long elapsed = millis() - startMillis;
+    milliSec = String(elapsed % 1000);
+    Sec = (elapsed / 1000) % 60;
+    Min = (elapsed / 60000) % 60;
+    
+    // Update the display with current time and lap times
+    updateDisplay();
+  }
+}
+
+void updateDisplay() {
+  display.clearDisplay();
+  
+  // Display current elapsed time at the top
+  display.setTextSize(2);
+  display.setCursor(0, 0);
+  if (Min < 10) {
+    display.print("0");
+  }
+  display.print(Min);
+  display.print(":");
+  if (Sec < 10) {
+    display.print("0");
+  }
+  display.print(Sec);
+  display.print(".");
+  if (milliSec.length() >= 2) {
+    display.print(milliSec[0]);
+    display.print(milliSec[1]);
+  }
+  else {
+    display.print("00");
+  }
+  
+  // Display lap times below the current time
+  display.setTextSize(1);
+  int visibleLaps = min(lapNum - 1, MAX_LAPS);
+  for (int i = 0; i < visibleLaps; i++) {
+    display.setCursor(0, 16 + (i * 10));  // Adjust vertical spacing as needed
+    display.print("LP");
+    display.print(i + 1);
+    display.print(" ");
+    display.print(lapTimes[i]);
+  }
+  
+  display.display();
+}
+
+void lapTime() {
+  String lapMilliSec = milliSec;
+  int lapSec = Sec, lapMin = Min;
+  
+  // Format the lap time as a string
+  String formattedTime = "";
+  if (lapMin < 10) {
+    formattedTime += "0";
+  }
+  formattedTime += lapMin;
+  formattedTime += ":";
+  if (lapSec < 10) {
+    formattedTime += "0";
+  }
+  formattedTime += lapSec;
+  formattedTime += ".";
+  if (lapMilliSec.length() >= 2) {
+    formattedTime += lapMilliSec[0];
+    formattedTime += lapMilliSec[1];
+  }
+  else {
+    formattedTime += "00";
+  }
+  
+  // Store the lap time in the array (cycling through if more than MAX_LAPS)
+  int index = (lapNum - 1) % MAX_LAPS;
+  lapTimes[index] = formattedTime;
+  
+  lapNum++;
+}
